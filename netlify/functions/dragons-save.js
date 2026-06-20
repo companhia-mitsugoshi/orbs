@@ -1,5 +1,23 @@
 // netlify/functions/dragons-save.js
+// Salva a lista de dragões no Netlify Blobs.
+// Endpoint protegido — exige header 'x-admin-key' igual à variável de
+// ambiente ADMIN_SECRET configurada no painel do Netlify (nunca no código).
+
 const { getStore } = require('@netlify/blobs');
+
+// Helper: cria o store tentando a auto-injeção do ambiente primeiro;
+// se faltar configuração, usa siteID/token manuais (variáveis de ambiente
+// BLOBS_SITE_ID e BLOBS_TOKEN configuradas no painel do Netlify).
+function getMitsugoshiStore() {
+  if (process.env.BLOBS_SITE_ID && process.env.BLOBS_TOKEN) {
+    return getStore({
+      name: 'mitsugoshi',
+      siteID: process.env.BLOBS_SITE_ID,
+      token: process.env.BLOBS_TOKEN,
+    });
+  }
+  return getStore('mitsugoshi');
+}
 
 exports.handler = async function (event) {
   const headers = {
@@ -17,6 +35,7 @@ exports.handler = async function (event) {
     return { statusCode: 405, headers, body: JSON.stringify({ error: 'Método não permitido' }) };
   }
 
+  // ── Verificação da senha de admin ──────────────────────────────
   const providedKey = event.headers['x-admin-key'] || event.headers['X-Admin-Key'];
   const expectedKey = process.env.ADMIN_SECRET;
 
@@ -37,6 +56,7 @@ exports.handler = async function (event) {
     };
   }
 
+  // ── Validação do corpo ──────────────────────────────────────────
   let payload;
   try {
     payload = JSON.parse(event.body || '[]');
@@ -49,7 +69,7 @@ exports.handler = async function (event) {
   }
 
   try {
-    const store = getStore('mitsugoshi');
+    const store = getMitsugoshiStore();
     await store.setJSON('dragons', payload);
     return {
       statusCode: 200,

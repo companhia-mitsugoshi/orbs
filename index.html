@@ -433,6 +433,88 @@
     .total-label { font-size: 0.82rem; color: #9ca3af; }
     #totalDisplay { font-size: 1.1rem; font-weight: 800; color: #4ade80; }
 
+    .essence-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 6px 0;
+      font-size: 0.78rem;
+      color: #9ca3af;
+    }
+    .essence-row span:last-child { color: #facc15; font-weight: 700; }
+
+    .pull-toggle-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 12px;
+      background: rgba(124,58,237,0.08);
+      border: 1px solid rgba(124,58,237,0.25);
+      border-radius: 12px;
+      margin-bottom: 12px;
+    }
+    .pull-toggle-label { font-size: 0.8rem; color: #e5e7eb; font-weight: 600; }
+    .pull-toggle-sub { font-size: 0.66rem; color: #9ca3af; margin-top: 2px; }
+    .pull-toggle-switch {
+      position: relative;
+      width: 46px;
+      height: 26px;
+      flex-shrink: 0;
+    }
+    .pull-toggle-switch input { opacity: 0; width: 0; height: 0; }
+    .pull-toggle-slider {
+      position: absolute;
+      cursor: pointer;
+      inset: 0;
+      background: rgba(255,255,255,0.15);
+      border-radius: 999px;
+      transition: 0.2s;
+    }
+    .pull-toggle-slider::before {
+      content: '';
+      position: absolute;
+      width: 20px; height: 20px;
+      left: 3px; bottom: 3px;
+      background: #fff;
+      border-radius: 50%;
+      transition: 0.2s;
+    }
+    .pull-toggle-switch input:checked + .pull-toggle-slider { background: #9333ea; }
+    .pull-toggle-switch input:checked + .pull-toggle-slider::before { transform: translateX(20px); }
+
+    #pullDragonsSection { display: none; margin-bottom: 14px; }
+    #pullDragonsSection.open { display: block; }
+    .pull-dragon-row {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+    .pull-dragon-row input[type="text"] { flex: 2; }
+    .pull-dragon-row input[type="number"] { flex: 1; }
+    .pull-dragon-row .btn-remove-pull {
+      background: rgba(239,68,68,0.15);
+      border: 1px solid rgba(239,68,68,0.3);
+      color: #f87171;
+      width: 38px;
+      border-radius: 10px;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+    .btn-add-pull {
+      width: 100%;
+      padding: 9px;
+      background: rgba(255,255,255,0.05);
+      border: 1px dashed rgba(255,255,255,0.2);
+      color: #9ca3af;
+      border-radius: 10px;
+      font-family: 'Poppins', sans-serif;
+      font-size: 0.75rem;
+      cursor: pointer;
+      margin-bottom: 4px;
+    }
+    .btn-add-pull:hover { background: rgba(255,255,255,0.08); }
+
     .btn-finalize {
       width: 100%;
       padding: 13px;
@@ -698,6 +780,27 @@
 
     <div id="cartList"></div>
 
+    <div class="pull-toggle-row">
+      <div>
+        <div class="pull-toggle-label">🏪 Loja Puxando</div>
+        <div class="pull-toggle-sub">Gasta menos essências, +R$1 a cada 100 Orbs</div>
+      </div>
+      <label class="pull-toggle-switch">
+        <input type="checkbox" id="pullToggle" onchange="togglePullMode()">
+        <span class="pull-toggle-slider"></span>
+      </label>
+    </div>
+
+    <div id="pullDragonsSection">
+      <label class="settings-label" style="display:block;margin-bottom:8px">Dragões que você vai dar</label>
+      <div id="pullDragonsList"></div>
+      <button type="button" class="btn-add-pull" onclick="addPullDragonRow()">
+        <i class="fa-solid fa-plus"></i> Adicionar dragão
+      </button>
+    </div>
+
+    <div id="essenceSummary"></div>
+
     <input class="modal-input" type="text" id="nick" placeholder="Seu nick no Dragon City">
     <input class="modal-input" type="tel"  id="telefone" placeholder="Seu WhatsApp (ex: 55...)">
 
@@ -766,6 +869,16 @@
   let cart = [];
   let activeFilter = 'todos';
   let dragonsCache = [];
+  let pullMode = false;
+  let pullDragonRows = 0;
+
+  // Quantidade de "saltos" de troca necessários para fechar 100 Orbs,
+  // considerando o arredondamento por raridade (100→100, 100→102, 100→105).
+  const SALTOS_POR_100_ORBS = {
+    heroi: 20,    // 5 em 5 → 100/5 = 20 saltos
+    mitico: 17,   // 6 em 6 → 102/6 = 17 saltos
+    lendario: 15, // 7 em 7 → 105/7 = 15 saltos
+  };
 
   // ── Load (busca do servidor via Netlify Function, fallback local) ──
   async function loadDragons() {
@@ -982,12 +1095,14 @@
     if (cart.length === 0) {
       list.innerHTML = `<div class="empty-cart"><i class="fa-solid fa-shopping-basket"></i> Seu carrinho está vazio.</div>`;
       document.getElementById('totalDisplay').textContent = 'R$ 0,00';
+      document.getElementById('essenceSummary').innerHTML = '';
       return;
     }
 
     list.innerHTML = cart.map((item, i) => {
       const precoUnit = (item.preco !== undefined && item.preco !== null) ? item.preco : 3;
-      const price = ((item.orbs / 100) * precoUnit).toFixed(2);
+      const precoAjustado = pullMode ? precoUnit + 1 : precoUnit;
+      const price = ((item.orbs / 100) * precoAjustado).toFixed(2);
       return `
         <div class="cart-item">
           <img src="${item.img || 'https://placehold.co/46x46/111/333?text=?'}"
@@ -1002,12 +1117,88 @@
       `;
     }).join('');
 
-    const raw   = cart.reduce((acc, c) => {
+    const raw = cart.reduce((acc, c) => {
       const precoUnit = (c.preco !== undefined && c.preco !== null) ? c.preco : 3;
-      return acc + (c.orbs / 100) * precoUnit;
+      const precoAjustado = pullMode ? precoUnit + 1 : precoUnit;
+      return acc + (c.orbs / 100) * precoAjustado;
     }, 0);
     const total = raw * (1 - discount);
     document.getElementById('totalDisplay').textContent = `R$ ${total.toFixed(2)}`;
+
+    renderEssenceSummary();
+  }
+
+  // ── Essências (calculadas automaticamente por raridade) ────────
+  function calcEssencias(item) {
+    const saltos = SALTOS_POR_100_ORBS[item.raridade] || SALTOS_POR_100_ORBS.heroi;
+    const custoSalto = pullMode ? 1 : 2;
+    const lotes = item.orbs / 100;
+    return Math.round(saltos * custoSalto * lotes);
+  }
+
+  function renderEssenceSummary() {
+    const box = document.getElementById('essenceSummary');
+    if (cart.length === 0) { box.innerHTML = ''; return; }
+
+    const linhas = cart.map(item => {
+      const essencias = calcEssencias(item);
+      return `<div class="essence-row"><span>${item.nome} (${item.orbs} Orbs)</span><span>${essencias} essências</span></div>`;
+    }).join('');
+
+    const totalEssencias = cart.reduce((acc, item) => acc + calcEssencias(item), 0);
+
+    box.innerHTML = `
+      ${linhas}
+      <div class="essence-row" style="border-top:1px solid rgba(255,255,255,0.07);margin-top:4px;padding-top:8px;font-weight:700">
+        <span>Total de essências</span><span>${totalEssencias}</span>
+      </div>
+    `;
+  }
+
+  // ── Modo "Loja Puxando" ─────────────────────────────────────────
+  function togglePullMode() {
+    pullMode = document.getElementById('pullToggle').checked;
+    const section = document.getElementById('pullDragonsSection');
+    section.classList.toggle('open', pullMode);
+
+    if (pullMode && document.getElementById('pullDragonsList').children.length === 0) {
+      addPullDragonRow();
+    }
+
+    renderCart();
+  }
+
+  function addPullDragonRow() {
+    pullDragonRows++;
+    const rowId = pullDragonRows;
+    const list = document.getElementById('pullDragonsList');
+    const row = document.createElement('div');
+    row.className = 'pull-dragon-row';
+    row.id = `pullRow-${rowId}`;
+    row.innerHTML = `
+      <input type="text" class="modal-input" placeholder="Nome do dragão" id="pullName-${rowId}">
+      <input type="number" class="modal-input" placeholder="Qtd" min="1" id="pullQty-${rowId}">
+      <button type="button" class="btn-remove-pull" onclick="removePullDragonRow(${rowId})"><i class="fa-solid fa-xmark"></i></button>
+    `;
+    list.appendChild(row);
+  }
+
+  function removePullDragonRow(rowId) {
+    const row = document.getElementById(`pullRow-${rowId}`);
+    if (row) row.remove();
+  }
+
+  function getPullDragonsList() {
+    const rows = document.querySelectorAll('#pullDragonsList .pull-dragon-row');
+    const result = [];
+    rows.forEach(row => {
+      const nameInput = row.querySelector('input[type="text"]');
+      const qtyInput = row.querySelector('input[type="number"]');
+      const nome = nameInput?.value.trim();
+      const qtd = qtyInput?.value.trim();
+      if (nome) result.push({ nome, qtd: qtd || '1' });
+    });
+    return result;
   }
 
   function removeItem(i) {
@@ -1021,8 +1212,24 @@
     const nick = document.getElementById('nick').value.trim();
     const tel  = document.getElementById('telefone').value.trim();
     const total = document.getElementById('totalDisplay').textContent;
-    const lines = cart.map(c => `• ${c.nome} — ${c.orbs} Orbs`).join('\n');
-    const msg = `Olá! Quero fazer um pedido na Mitsugoshi:\n\n${lines}\n\nTotal: ${total}\nNick: ${nick || '(não informado)'}\nWhatsApp: ${tel || '(não informado)'}`;
+
+    const lines = cart.map(c => {
+      const essencias = calcEssencias(c);
+      return `• ${c.nome} — ${c.orbs} Orbs (${essencias} essências)`;
+    }).join('\n');
+
+    const totalEssencias = cart.reduce((acc, item) => acc + calcEssencias(item), 0);
+
+    let pullInfo = '';
+    if (pullMode) {
+      const pullDragons = getPullDragonsList();
+      const pullLines = pullDragons.length > 0
+        ? pullDragons.map(p => `• ${p.nome} x${p.qtd}`).join('\n')
+        : '(nenhum dragão informado)';
+      pullInfo = `\n\n🏪 Loja Puxando — dragões que serão dados:\n${pullLines}`;
+    }
+
+    const msg = `Olá! Quero fazer um pedido na Mitsugoshi:\n\n${lines}\n\nTotal de essências: ${totalEssencias}${pullInfo}\n\nTotal: ${total}\nNick: ${nick || '(não informado)'}\nWhatsApp: ${tel || '(não informado)'}`;
     window.open(`https://wa.me/5534991779656?text=${encodeURIComponent(msg)}`, '_blank');
   }
 

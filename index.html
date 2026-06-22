@@ -800,6 +800,7 @@
     </div>
 
     <div id="essenceSummary"></div>
+    <div id="discountSummary"></div>
 
     <input class="modal-input" type="text" id="nick" placeholder="Seu nick no Dragon City">
     <input class="modal-input" type="tel"  id="telefone" placeholder="Seu WhatsApp (ex: 55...)">
@@ -1087,17 +1088,32 @@
   function openCart()  { renderCart(); document.getElementById('checkoutModal').classList.add('open'); }
   function closeCart() { document.getElementById('checkoutModal').classList.remove('open'); }
 
+  // ── Cupons de revendedor (200 Orbs grátis, exige 500+ Orbs no carrinho) ──
+  const CODIGOS_REVENDEDOR = ['pain007', 'rafinha200', 'angel200', 'jow200'];
+
   function renderCart() {
-    const bonus    = document.getElementById('bonusCode').value.toLowerCase().trim();
-    const discount = bonus === 'mitsugoshi' ? 0.1 : 0;
-    const list     = document.getElementById('cartList');
+    const bonus     = document.getElementById('bonusCode').value.toLowerCase().trim();
+    const list      = document.getElementById('cartList');
 
     if (cart.length === 0) {
       list.innerHTML = `<div class="empty-cart"><i class="fa-solid fa-shopping-basket"></i> Seu carrinho está vazio.</div>`;
       document.getElementById('totalDisplay').textContent = 'R$ 0,00';
       document.getElementById('essenceSummary').innerHTML = '';
+      document.getElementById('discountSummary').innerHTML = '';
       return;
     }
+
+    const totalOrbs = cart.reduce((acc, c) => acc + c.orbs, 0);
+
+    // Desconto automático de 15% para 1000+ Orbs no carrinho (sem precisar de código)
+    const desconto15 = totalOrbs >= 1000 ? 0.15 : 0;
+
+    // Cupom legado "mitsugoshi" (10%) continua funcionando, mas não se acumula com o automático de 15%
+    const discount = bonus === 'mitsugoshi' ? Math.max(0.1, desconto15) : desconto15;
+
+    // Código de revendedor: 200 Orbs grátis, exige 500+ Orbs no carrinho
+    const codigoValido = CODIGOS_REVENDEDOR.includes(bonus);
+    const orbsGratis = (codigoValido && totalOrbs >= 500) ? 200 : 0;
 
     list.innerHTML = cart.map((item, i) => {
       const precoUnit = (item.preco !== undefined && item.preco !== null) ? item.preco : 3;
@@ -1124,6 +1140,19 @@
     }, 0);
     const total = raw * (1 - discount);
     document.getElementById('totalDisplay').textContent = `R$ ${total.toFixed(2)}`;
+
+    // Resumo de benefícios aplicados
+    const discountBox = document.getElementById('discountSummary');
+    const beneficios = [];
+    if (desconto15 > 0) beneficios.push(`🎉 15% de desconto aplicado (compra de ${totalOrbs}+ Orbs)`);
+    if (bonus === 'mitsugoshi' && desconto15 === 0) beneficios.push(`🎉 10% de desconto (cupom Mitsugoshi)`);
+    if (orbsGratis > 0) beneficios.push(`🎁 +${orbsGratis} Orbs grátis (cupom de revendedor)`);
+    if (bonus && !codigoValido && bonus !== 'mitsugoshi') beneficios.push(`⚠️ Cupom inválido`);
+    if (codigoValido && totalOrbs < 500) beneficios.push(`⚠️ Cupom válido, mas requer 500+ Orbs no carrinho`);
+
+    discountBox.innerHTML = beneficios.length > 0
+      ? beneficios.map(b => `<div class="essence-row" style="color:#4ade80">${b}</div>`).join('')
+      : '';
 
     renderEssenceSummary();
   }
@@ -1212,6 +1241,8 @@
     const nick = document.getElementById('nick').value.trim();
     const tel  = document.getElementById('telefone').value.trim();
     const total = document.getElementById('totalDisplay').textContent;
+    const bonus = document.getElementById('bonusCode').value.toLowerCase().trim();
+    const totalOrbs = cart.reduce((acc, c) => acc + c.orbs, 0);
 
     const lines = cart.map(c => {
       const essencias = calcEssencias(c);
@@ -1219,6 +1250,14 @@
     }).join('\n');
 
     const totalEssencias = cart.reduce((acc, item) => acc + calcEssencias(item), 0);
+
+    let beneficiosInfo = '';
+    if (totalOrbs >= 1000) beneficiosInfo += `\n🎉 15% de desconto aplicado (1000+ Orbs)`;
+    else if (bonus === 'mitsugoshi') beneficiosInfo += `\n🎉 10% de desconto (cupom Mitsugoshi)`;
+
+    if (CODIGOS_REVENDEDOR.includes(bonus) && totalOrbs >= 500) {
+      beneficiosInfo += `\n🎁 +200 Orbs grátis (cupom de revendedor: ${bonus})`;
+    }
 
     let pullInfo = '';
     if (pullMode) {
@@ -1229,7 +1268,7 @@
       pullInfo = `\n\n🏪 Loja Puxando — dragões que serão dados:\n${pullLines}`;
     }
 
-    const msg = `Olá! Quero fazer um pedido na Mitsugoshi:\n\n${lines}\n\nTotal de essências: ${totalEssencias}${pullInfo}\n\nTotal: ${total}\nNick: ${nick || '(não informado)'}\nWhatsApp: ${tel || '(não informado)'}`;
+    const msg = `Olá! Quero fazer um pedido na Mitsugoshi:\n\n${lines}\n\nTotal de essências: ${totalEssencias}${beneficiosInfo}${pullInfo}\n\nTotal: ${total}\nNick: ${nick || '(não informado)'}\nWhatsApp: ${tel || '(não informado)'}`;
     window.open(`https://wa.me/5534991779656?text=${encodeURIComponent(msg)}`, '_blank');
   }
 

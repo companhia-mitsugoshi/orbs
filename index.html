@@ -822,8 +822,15 @@
       container.innerHTML = `<div class="rank-card glass-card" style="color:#4b5563;font-size:0.72rem;grid-column:1/-1;text-align:center;padding:24px">Nenhum dragão cadastrado ainda.</div>`;
       return;
     }
-    const top5 = dragons.slice(0, 5);
-    const colors = ['text-yellow-400','text-purple-400','text-purple-400','text-purple-400','text-purple-400'];
+
+    // Usa as posições definidas manualmente no admin (rankPos: 1 a 5).
+    // Se nenhum dragão tiver posição definida, cai no fallback dos 5 primeiros cadastrados.
+    const ranked = [1, 2, 3, 4, 5]
+      .map(pos => dragons.find(d => d.rankPos === pos))
+      .filter(Boolean);
+
+    const top5 = ranked.length > 0 ? ranked : dragons.slice(0, 5);
+
     const hexColors = ['#facc15','#a78bfa','#a78bfa','#a78bfa','#a78bfa'];
     container.innerHTML = top5.map((d, i) => `
       <div class="rank-card glass-card">
@@ -979,7 +986,8 @@
     }
 
     list.innerHTML = cart.map((item, i) => {
-      const price = ((item.orbs / 100) * 3).toFixed(2);
+      const precoUnit = (item.preco !== undefined && item.preco !== null) ? item.preco : 3;
+      const price = ((item.orbs / 100) * precoUnit).toFixed(2);
       return `
         <div class="cart-item">
           <img src="${item.img || 'https://placehold.co/46x46/111/333?text=?'}"
@@ -994,7 +1002,10 @@
       `;
     }).join('');
 
-    const raw   = cart.reduce((acc, c) => acc + (c.orbs / 100) * 3, 0);
+    const raw   = cart.reduce((acc, c) => {
+      const precoUnit = (c.preco !== undefined && c.preco !== null) ? c.preco : 3;
+      return acc + (c.orbs / 100) * precoUnit;
+    }, 0);
     const total = raw * (1 - discount);
     document.getElementById('totalDisplay').textContent = `R$ ${total.toFixed(2)}`;
   }

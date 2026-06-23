@@ -537,46 +537,6 @@
     .empty-cart { text-align: center; padding: 32px; color: #4b5563; font-size: 0.82rem; }
     .empty-cart i { font-size: 2rem; display: block; margin-bottom: 10px; }
 
-    /* ── Settings button ── */
-    #settingsBtn {
-      width: 38px;
-      height: 38px;
-      border-radius: 9999px;
-      background: rgba(255,255,255,0.05);
-      color: #9ca3af;
-      border: 1px solid rgba(255,255,255,0.1);
-      cursor: pointer;
-      font-size: 0.85rem;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      transition: all 0.2s;
-    }
-    #settingsBtn:hover { color: #22d3ee; border-color: rgba(34,211,238,0.4); transform: rotate(45deg); }
-
-    /* ── Settings Modal ── */
-    #settingsModal {
-      position: fixed;
-      inset: 0;
-      background: rgba(0,0,0,0.85);
-      z-index: 200;
-      display: none;
-      align-items: center;
-      justify-content: center;
-      padding: 20px;
-    }
-    #settingsModal.open { display: flex; }
-    .settings-note {
-      font-size: 0.7rem;
-      color: #6b7280;
-      line-height: 1.6;
-      background: rgba(34,211,238,0.06);
-      border: 1px solid rgba(34,211,238,0.15);
-      border-radius: 10px;
-      padding: 10px 12px;
-      margin-bottom: 16px;
-    }
-    .settings-note i { color: #22d3ee; margin-right: 4px; }
     .settings-label {
       font-size: 0.72rem;
       font-weight: 600;
@@ -586,27 +546,7 @@
       margin-bottom: 6px;
       display: block;
     }
-    .btn-save-settings {
-      width: 100%;
-      padding: 12px;
-      background: linear-gradient(135deg, #7c3aed, #6d28d9);
-      border: none;
-      border-radius: 12px;
-      color: #fff;
-      font-family: 'Poppins', sans-serif;
-      font-size: 0.85rem;
-      font-weight: 700;
-      cursor: pointer;
-      margin-top: 6px;
-      transition: opacity 0.2s;
-    }
-    .btn-save-settings:hover { opacity: 0.9; }
-    .settings-status {
-      font-size: 0.68rem;
-      color: #4ade80;
-      margin-top: 8px;
-      min-height: 1em;
-    }
+
 
     /* ── Chat flutuante ── */
     #chatToggleBtn {
@@ -700,15 +640,6 @@
       flex-shrink: 0;
     }
     .chat-input-row button:hover { background: #8b5cf6; }
-    .chat-config-needed {
-      padding: 24px 16px;
-      text-align: center;
-      color: #6b7280;
-      font-size: 0.78rem;
-      line-height: 1.6;
-    }
-    .chat-config-needed i { font-size: 1.8rem; color: #4b5563; display:block; margin-bottom: 10px; }
-    .chat-config-needed a { color: #22d3ee; cursor: pointer; font-weight: 600; }
   </style>
 </head>
 <body>
@@ -732,9 +663,6 @@
       <button id="cartBtn" onclick="openCart()">
         <i class="fa-solid fa-shopping-bag" style="color:#22d3ee"></i>
         Carrinho (<span id="cartCount">0</span>)
-      </button>
-      <button id="settingsBtn" onclick="openSettings()" title="Configurações">
-        <i class="fa-solid fa-gear"></i>
       </button>
     </div>
   </div>
@@ -822,28 +750,6 @@
 </div>
 
 <!-- ── MODAL CONFIGURAÇÕES ── -->
-<div id="settingsModal">
-  <div class="modal-box" style="max-width:420px">
-    <div class="modal-header">
-      <span class="modal-title"><i class="fa-solid fa-gear"></i> Configurações</span>
-      <button class="btn-close-modal" onclick="closeSettings()"><i class="fa-solid fa-xmark"></i></button>
-    </div>
-
-    <div class="settings-note">
-      <i class="fa-solid fa-circle-info"></i>
-      Sua chave de API é salva apenas no armazenamento local deste navegador. Ela nunca é enviada para nenhum servidor além da API oficial da Groq.
-    </div>
-
-    <label class="settings-label">Chave de API — Groq</label>
-    <input class="modal-input" type="password" id="groqApiKey" placeholder="gsk_...">
-
-    <button class="btn-save-settings" onclick="saveSettings()">
-      <i class="fa-solid fa-floppy-disk"></i> Salvar configurações
-    </button>
-    <div class="settings-status" id="settingsStatus"></div>
-  </div>
-</div>
-
 <!-- ── CHAT FLUTUANTE ── -->
 <button id="chatToggleBtn" onclick="toggleChat()" title="Assistente Mitsugoshi">
   <i class="fa-solid fa-comment-dots"></i>
@@ -1276,36 +1182,11 @@
   document.getElementById('checkoutModal').addEventListener('click', function(e) {
     if (e.target === this) closeCart();
   });
-  document.getElementById('settingsModal').addEventListener('click', function(e) {
-    if (e.target === this) closeSettings();
-  });
 
-  // ── Settings (chave Groq salva localmente) ─────────────────────
-  const SETTINGS_KEY = 'mitsugoshi_settings';
-
-  function getSettings() {
-    return JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}');
-  }
-
-  function openSettings() {
-    const s = getSettings();
-    document.getElementById('groqApiKey').value = s.groqApiKey || '';
-    document.getElementById('settingsModal').classList.add('open');
-  }
-  function closeSettings() { document.getElementById('settingsModal').classList.remove('open'); }
-
-  function saveSettings() {
-    const groqApiKey = document.getElementById('groqApiKey').value.trim();
-    const s = getSettings();
-    s.groqApiKey = groqApiKey;
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
-    document.getElementById('settingsStatus').textContent = 'Configurações salvas neste navegador!';
-    setTimeout(() => { document.getElementById('settingsStatus').textContent = ''; closeSettings(); }, 1200);
-  }
-
-  // ── Chat flutuante (Groq) ──────────────────────────────────────
+  // ── Chat flutuante (Groq via proxy seguro) ──────────────────────
   let chatHistory = [];
   let chatOpened = false;
+  const FN_CHAT = '/.netlify/functions/groq-chat';
 
   function toggleChat() {
     const win = document.getElementById('chatWindow');
@@ -1317,29 +1198,9 @@
   }
 
   function initChatUI() {
-    const s = getSettings();
     const messages = document.getElementById('chatMessages');
-    const inputRow = document.getElementById('chatInputRow');
-
-    if (!s.groqApiKey) {
-      inputRow.style.display = 'none';
-      messages.innerHTML = `
-        <div class="chat-config-needed">
-          <i class="fa-solid fa-key"></i>
-          O assistente de IA ainda não está configurado.<br>
-          <a onclick="closeChatAndOpenSettings()">Configurar chave de API →</a>
-        </div>`;
-      return;
-    }
-
-    inputRow.style.display = 'flex';
     messages.innerHTML = '';
     addChatMessage('bot', 'Olá! 🐉 Sou o assistente da Mitsugoshi. Me conte o que você procura (ex: "quero um dragão mítico com habilidade de cura") e eu recomendo as melhores opções do nosso catálogo!');
-  }
-
-  function closeChatAndOpenSettings() {
-    document.getElementById('chatWindow').classList.remove('open');
-    openSettings();
   }
 
   function addChatMessage(role, text) {
@@ -1371,43 +1232,26 @@
 
     const typing = addChatMessage('bot typing', 'Digitando...');
 
-    const s = getSettings();
-    const systemPrompt = `Você é o atendente virtual especializado da loja Mitsugoshi, que vende itens do jogo Dragon City (Orbs trocados por dragões).
-Abaixo está a lista COMPLETA e ATUAL de dragões disponíveis no catálogo. Você SÓ pode recomendar dragões que estejam nesta lista — nunca invente nomes, habilidades ou raridades que não estejam aqui.
-Se o cliente pedir algo que não existe no catálogo, diga isso com simpatia e sugira a opção mais próxima da lista.
-Seja breve, simpático e direto, usando emojis com moderação. Responda sempre em português.
-
-CATÁLOGO ATUAL:
-${buildCatalogSummary()}`;
-
     try {
-      const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      const res = await fetch(FN_CHAT, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${s.groqApiKey}`
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          model: 'llama-3.3-70b-versatile',
-          messages: [
-            { role: 'system', content: systemPrompt },
-            ...chatHistory
-          ],
-          temperature: 0.6,
-          max_tokens: 500
-        })
+          messages: chatHistory,
+          catalogSummary: buildCatalogSummary(),
+        }),
       });
 
       const data = await res.json();
       typing.remove();
 
       if (!res.ok) {
-        addChatMessage('bot', 'Não consegui me conectar à IA. Verifique sua chave de API nas configurações ⚙️.');
-        console.error('Groq API error:', data);
+        addChatMessage('bot', 'O assistente está indisponível agora. Tente novamente em alguns instantes.');
+        console.error('Erro do proxy de chat:', data);
         return;
       }
 
-      const reply = data.choices?.[0]?.message?.content?.trim() || 'Desculpe, não consegui gerar uma resposta agora.';
+      const reply = data.reply || 'Desculpe, não consegui gerar uma resposta agora.';
       addChatMessage('bot', reply);
       chatHistory.push({ role: 'assistant', content: reply });
 

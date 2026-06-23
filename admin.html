@@ -632,6 +632,7 @@
           <p style="font-size:0.65rem">PNG, JPG, WEBP</p>
         </div>
         <img id="imgPreview" src="" alt="preview">
+        <div id="uploadStatus" style="font-size:0.68rem;color:#9ca3af;margin-top:4px"></div>
       </div>
 
       <div class="or-divider">ou cole a URL da imagem</div>
@@ -756,8 +757,15 @@
 
   async function persist(data) {
     dragonsCache = data;
-    // Guarda uma cópia local de segurança (não é a fonte de verdade)
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    // Guarda uma cópia local de segurança (não é a fonte de verdade).
+    // Protegido por try/catch: se o navegador estourar a cota do localStorage
+    // (comum quando há imagens em base64), isso NÃO deve impedir o salvamento
+    // real no servidor (Netlify Blobs), que é o que importa de fato.
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    } catch (e) {
+      console.warn('Não foi possível salvar a cópia local de backup (cota do navegador excedida). O salvamento no servidor continua normalmente.', e);
+    }
 
     const s = getSettings();
     if (!s.adminSecretKey) {
@@ -955,16 +963,52 @@ Gere entre 2 e 4 habilidades no total, misturando ativas e passivas, todas coere
     })).filter(s => s.texto);
   }
 
-  // ── Upload ────────────────────────────────────────────────────
+  // ── Upload (via proxy seguro para ImgBB) ────────────────────────
+  const FN_UPLOAD = '/.netlify/functions/upload-image';
+  let uploadedImageUrl = '';
+
   function handleFileUpload(input) {
     const file = input.files[0];
     if (!file) return;
+
+    const statusEl = document.getElementById('uploadStatus');
     const reader = new FileReader();
-    reader.onload = e => {
+
+    reader.onload = async e => {
+      // Mostra preview local imediato (base64) enquanto o upload acontece
       document.getElementById('imgPreview').src = e.target.result;
       document.getElementById('imgPreview').style.display = 'block';
       document.getElementById('fImgUrl').value = '';
+      uploadedImageUrl = '';
+      statusEl.textContent = 'Enviando imagem...';
+      statusEl.style.color = '#9ca3af';
+
+      try {
+        const res = await fetch(FN_UPLOAD, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ imageBase64: e.target.result }),
+        });
+        const data = await res.json();
+
+        if (!res.ok || !data.url) {
+          console.error('Erro no upload:', data);
+          statusEl.textContent = 'Erro ao enviar imagem. Tente novamente ou use uma URL.';
+          statusEl.style.color = '#f87171';
+          return;
+        }
+
+        uploadedImageUrl = data.url;
+        document.getElementById('imgPreview').src = data.url;
+        statusEl.textContent = 'Imagem enviada com sucesso!';
+        statusEl.style.color = '#4ade80';
+      } catch (err) {
+        console.error(err);
+        statusEl.textContent = 'Erro de conexão ao enviar imagem. Tente novamente ou use uma URL.';
+        statusEl.style.color = '#f87171';
+      }
     };
+
     reader.readAsDataURL(file);
   }
 
@@ -973,14 +1017,17 @@ Gere entre 2 e 4 habilidades no total, misturando ativas e passivas, todas coere
       document.getElementById('imgPreview').src = input.value;
       document.getElementById('imgPreview').style.display = 'block';
       document.getElementById('fImgFile').value = '';
+      uploadedImageUrl = '';
+      document.getElementById('uploadStatus').textContent = '';
     }
   }
 
   function getImageSrc() {
     const url = document.getElementById('fImgUrl').value.trim();
     if (url) return url;
-    const preview = document.getElementById('imgPreview').src;
-    if (preview && preview !== window.location.href) return preview;
+    if (uploadedImageUrl) return uploadedImageUrl;
+    // Fallback: se por algum motivo o upload não terminou, evita salvar
+    // um base64 gigante no servidor (preferimos campo vazio a travar tudo).
     return '';
   }
 
@@ -1030,6 +1077,8 @@ Gere entre 2 e 4 habilidades no total, misturando ativas e passivas, todas coere
     document.getElementById('fPreco').value = '3.00';
     document.getElementById('imgPreview').src = '';
     document.getElementById('imgPreview').style.display = 'none';
+    document.getElementById('uploadStatus').textContent = '';
+    uploadedImageUrl = '';
     document.getElementById('skillsContainer').innerHTML = '';
     document.getElementById('editingId').value = '';
     document.querySelectorAll('.rarity-opt').forEach(o => o.classList.remove('selected'));
@@ -1045,6 +1094,7 @@ Gere entre 2 e 4 habilidades no total, misturando ativas e passivas, todas coere
     document.getElementById('fNome').value = d.nome;
     document.getElementById('fCat').value  = d.cat;
     document.getElementById('fImgUrl').value = d.img && !d.img.startsWith('data:') ? d.img : '';
+    uploadedImageUrl = d.img && !d.img.startsWith('data:') ? d.img : '';
     document.getElementById('fPreco').value = (d.preco !== undefined && d.preco !== null) ? d.preco : '3.00';
     document.getElementById('editingId').value = id;
 

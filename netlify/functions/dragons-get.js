@@ -1,5 +1,12 @@
-// netlify/functions/dragons-get.js
-const { getStore } = require('@netlify/blobs');
+const admin = require('firebase-admin');
+
+// Inicializa o Firebase usando a variável de ambiente que você vai configurar no Netlify
+if (!admin.apps.length) {
+  admin.initializeApp({
+    credential: admin.credential.cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT))
+  });
+}
+const db = admin.firestore();
 
 exports.handler = async function (event) {
   const headers = {
@@ -12,24 +19,26 @@ exports.handler = async function (event) {
     return { statusCode: 200, headers, body: '' };
   }
 
-  if (event.httpMethod !== 'GET') {
-    return { statusCode: 405, headers, body: JSON.stringify({ error: 'Método não permitido' }) };
-  }
-
   try {
-    const store = getStore('mitsugoshi');
-    const data = await store.get('dragons', { type: 'json' });
+    // Busca os dragões no Firestore em vez do Netlify Blobs
+    const snapshot = await db.collection('dragons').orderBy('nome').get();
+    const dragons = [];
+    
+    snapshot.forEach(doc => {
+      dragons.push({ id: doc.id, ...doc.data() });
+    });
+
     return {
       statusCode: 200,
       headers,
-      body: JSON.stringify(data || []),
+      body: JSON.stringify(dragons),
     };
   } catch (err) {
-    console.error('Erro ao ler dragões:', err);
+    console.error('Erro ao ler do Firebase:', err);
     return {
       statusCode: 500,
       headers,
-      body: JSON.stringify({ error: 'Erro ao buscar dados.' }),
+      body: JSON.stringify({ error: 'Erro ao buscar dados no banco de dados.' }),
     };
   }
 };

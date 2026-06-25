@@ -1,8 +1,12 @@
-// netlify/functions/groq-chat.js
-// Proxy seguro para o chat com IA do catálogo (Groq).
-// A chave de API da Groq fica só nesta function, como variável de
-// ambiente GROQ_API_KEY configurada no painel do Netlify — nunca é
-// enviada para o navegador do cliente.
+const admin = require('firebase-admin');
+
+// Inicializa Firebase Admin
+if (!admin.apps.length) {
+  admin.initializeApp({
+    credential: admin.credential.cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT))
+  });
+}
+const db = admin.firestore();
 
 exports.handler = async function (event) {
   const headers = {
@@ -12,49 +16,59 @@ exports.handler = async function (event) {
     'Access-Control-Allow-Headers': 'Content-Type',
   };
 
-  if (event.httpMethod === 'OPTIONS') {
-    return { statusCode: 200, headers, body: '' };
-  }
-
-  if (event.httpMethod !== 'POST') {
-    return { statusCode: 405, headers, body: JSON.stringify({ error: 'Método não permitido' }) };
-  }
+  if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers, body: '' };
 
   const apiKey = process.env.GROQ_API_KEY;
-  if (!apiKey) {
-    console.error('GROQ_API_KEY não configurada nas variáveis de ambiente do Netlify.');
-    return {
-      statusCode: 500,
-      headers,
-      body: JSON.stringify({ error: 'Assistente de IA não está configurado no servidor.' }),
-    };
-  }
-
   let payload;
   try {
     payload = JSON.parse(event.body || '{}');
   } catch {
-    return { statusCode: 400, headers, body: JSON.stringify({ error: 'JSON inválido.' }) };
+    return { statusCode: 400, headers, body: 'JSON inválido' };
   }
 
-  const { messages, catalogSummary } = payload;
-
-  if (!Array.isArray(messages) || messages.length === 0) {
-    return { statusCode: 400, headers, body: JSON.stringify({ error: 'Histórico de mensagens ausente.' }) };
-  }
-
-  // Limita o tamanho do histórico para evitar abuso/custo excessivo
-  const trimmedMessages = messages.slice(-20);
-
-  const systemPrompt = `Você é o atendente virtual especializado da loja Mitsugoshi, que vende itens do jogo Dragon City (Orbs trocados por dragões).
-Abaixo está a lista COMPLETA e ATUAL de dragões disponíveis no catálogo. Você SÓ pode recomendar dragões que estejam nesta lista — nunca invente nomes, habilidades ou raridades que não estejam aqui.
-Se o cliente pedir algo que não existe no catálogo, diga isso com simpatia e sugira a opção mais próxima da lista.
-Seja breve, simpático e direto, usando emojis com moderação. Responda sempre em português.
-
-CATÁLOGO ATUAL:
-${catalogSummary || 'O catálogo está vazio no momento.'}`;
+  const { messages } = payload;
+  const userQuery = messages[messages.length - 1].content; // A última pergunta do cliente
 
   try {
+    // --- PASSO 1: BUSCA INTELIGENTE NO FIRESTORE ---
+    // Vamos extrair palavras-chave da pergunta para buscar no banco
+    const keywords = userQuery.toLowerCase().split(' ').filter(w => w.length > 3);
+    
+    let relevantDragons = [];
+    
+    if (keywords.length > 0) {
+      // Busca no Firestore dragões cujo nome comece com as palavras-chave
+      // Nota: O Firestore é limitado em buscas de texto. 
+      // Para melhor resultado, buscamos os primeiros 10 que batem com a raridade ou nome.
+      const snapshot = await db.collection('dragons')
+        .where('tags', 'array-contains-any', keywords.slice(0, 10)) 
+        .limit(10)
+        .get();
+
+      snapshot.forEach(doc => relevantDragons.push(doc.data()));
+    }
+
+    // Se não achou nada específico, pega os 5 dragões em destaque (opcional)
+    if (relevantDragons.length === 0) {
+      const featured = await db.collection('dragons').limit(5).get();
+      featured.forEach(doc => relevantDragons.push(doc.data()));
+    }
+
+    // Formata os dados encontrados para a IA
+    const contextSummary = relevantDragons.map(d => 
+      `- ${d.nome} (Raridade: ${d.raridade}, Esferas: ${d.esferas}, Preço: ${d.preco})`
+    ).join('\n');
+
+    // --- PASSO 2: CHAMADA PARA A GROQ ---
+    const systemPrompt = `Você é o atendente da Mitsugoshi. 
+Com base na pergunta do cliente, eu encontrei estes dragões no nosso banco de dados:
+${contextSummary}
+
+Instruções:
+1. Use APENAS as informações acima para responder.
+2. Se o dragão que ele quer não estiver na lista acima, diga que não encontrei no momento, mas sugira um desses acima.
+3. Responda de forma curta e amigável em português.`;
+
     const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -65,37 +79,23 @@ ${catalogSummary || 'O catálogo está vazio no momento.'}`;
         model: 'llama-3.3-70b-versatile',
         messages: [
           { role: 'system', content: systemPrompt },
-          ...trimmedMessages,
+          ...messages.slice(-5), // Envia as últimas 5 mensagens para contexto
         ],
-        temperature: 0.6,
-        max_tokens: 500,
+        temperature: 0.5,
       }),
     });
 
     const data = await groqRes.json();
-
-    if (!groqRes.ok) {
-      console.error('Erro da API Groq:', data);
-      return {
-        statusCode: 502,
-        headers,
-        body: JSON.stringify({ error: 'Erro ao consultar o assistente de IA.' }),
-      };
-    }
-
-    const reply = data.choices?.[0]?.message?.content?.trim() || 'Desculpe, não consegui gerar uma resposta agora.';
+    const reply = data.choices?.[0]?.message?.content || 'Não consegui processar sua dúvida.';
 
     return {
       statusCode: 200,
       headers,
       body: JSON.stringify({ reply }),
     };
+
   } catch (err) {
-    console.error('Erro ao chamar a Groq:', err);
-    return {
-      statusCode: 500,
-      headers,
-      body: JSON.stringify({ error: 'Erro de conexão com o assistente de IA.' }),
-    };
+    console.error(err);
+    return { statusCode: 500, headers, body: JSON.stringify({ error: 'Erro interno' }) };
   }
 };

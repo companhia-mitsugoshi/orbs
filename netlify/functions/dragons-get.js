@@ -1,6 +1,5 @@
 const admin = require('firebase-admin');
 
-// Inicializa o Firebase usando a variável de ambiente que você vai configurar no Netlify
 if (!admin.apps.length) {
   admin.initializeApp({
     credential: admin.credential.cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT))
@@ -15,12 +14,9 @@ exports.handler = async function (event) {
     'Access-Control-Allow-Methods': 'GET, OPTIONS',
   };
 
-  if (event.httpMethod === 'OPTIONS') {
-    return { statusCode: 200, headers, body: '' };
-  }
+  if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers, body: '' };
 
   try {
-    // Busca os dragões no Firestore em vez do Netlify Blobs
     const snapshot = await db.collection('dragons').orderBy('nome').get();
     const dragons = [];
     
@@ -38,7 +34,7 @@ exports.handler = async function (event) {
     return {
       statusCode: 500,
       headers,
-      body: JSON.stringify({ error: 'Erro ao buscar dados no banco de dados.' }),
+      body: JSON.stringify({ error: 'Erro ao buscar dados no banco.' }),
     };
   }
 };

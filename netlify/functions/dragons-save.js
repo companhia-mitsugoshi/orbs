@@ -26,32 +26,37 @@ exports.handler = async function (event) {
 
   try {
     const dragons = JSON.parse(event.body || '[]');
-    const chunks = [];
-    for (let i = 0; i < dragons.length; i += 500) {
-      chunks.push(dragons.slice(i, i + 500));
-    }
+    const snapshot = await db.collection('dragons').get();
+    const existingIds = snapshot.docs.map(doc => doc.id);
+    const newIds = dragons.map(d => d.id);
 
-    for (const chunk of chunks) {
-      const batch = db.batch();
-      chunk.forEach(d => {
-        const docId = d.id || d.nome.replace(/\s+/g, '-').toLowerCase();
-        const docRef = db.collection('dragons').doc(docId);
-        
-        // Tags para busca inteligente da IA
-        const tags = [
-          ...d.nome.toLowerCase().split(' '),
-          d.raridade.toLowerCase(),
-          d.cat.toLowerCase()
-        ].filter(t => t.length > 2);
+    // IDs que você removeu no painel mas ainda estão no banco
+    const idsToDelete = existingIds.filter(id => !newIds.includes(id));
 
-        batch.set(docRef, { ...d, tags, updatedAt: Date.now() }, { merge: true });
-      });
-      await batch.commit();
-    }
+    const batch = db.batch();
+
+    // Deleta os que foram removidos
+    idsToDelete.forEach(id => {
+      batch.delete(db.collection('dragons').doc(id));
+    });
+
+    // Salva/Atualiza os que ficaram
+    dragons.forEach(d => {
+      const docRef = db.collection('dragons').doc(d.id);
+      const tags = [
+        ...d.nome.toLowerCase().split(' '),
+        d.raridade.toLowerCase(),
+        d.cat.toLowerCase()
+      ].filter(t => t.length > 2);
+
+      batch.set(docRef, { ...d, tags, updatedAt: Date.now() }, { merge: true });
+    });
+
+    await batch.commit();
 
     return { statusCode: 200, headers, body: JSON.stringify({ success: true }) };
   } catch (err) {
-    console.error('Erro ao salvar no Firestore:', err);
+    console.error('Erro ao sincronizar Firestore:', err);
     return { statusCode: 500, headers, body: JSON.stringify({ error: err.message }) };
   }
 };
